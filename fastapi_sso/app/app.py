@@ -1,14 +1,24 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2AuthorizationCodeBearer
+from fastapi.concurrency import asynccontextmanager
 from starlette.config import Config
 from starlette.requests import Request
 from authlib.integrations.starlette_client import OAuth,OAuthError
-from .config import CLIENT_ID, CLIENT_SECRET
+# from .config import CLIENT_ID, CLIENT_SECRET
 from starlette.middleware.sessions import SessionMiddleware
+from fastapi_sso.services.startup.initialize_database import ensure_file_exists, init_sqlite_database
+from fastapi_sso.utils.auth import handleToken
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_file_exists("../db/user.db")
+    init_sqlite_database("../db/user.db")
+    yield
 
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key="add any string...")
+
 
 # Configuration
 config = Config('../.env')
@@ -26,17 +36,18 @@ oauth.register(
     }
 )
 
+oauth.register(
+    name='github',
+    client_id=config.file_values['GITHUB_CLIENT_ID'],
+    client_secret=config.file_values['GITHUB_CLIENT_SECRET'],
+    access_token_url='https://github.com/login/oauth/access_token',
+    access_token_params=None,
+    authorize_url='https://github.com/login/oauth/authorize',
+    authorize_params=None,
+    api_base_url='https://api.github.com/',
+    client_kwargs={'scope': 'read:user user:email'},
+)
 
-# Configure multiple OIDC providers
-# oauth.register(
-#     name='google',
-#     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-#     client_kwargs={
-#         'scope': 'openid email profile',
-#         'redirect_url' : 'http://localhost:8000/auth'
-#     }
-    
-# )
 
 @app.get('/')
 async def homepage(request: Request):
@@ -52,14 +63,14 @@ async def login(provider: str, request: Request):
 
 @app.get('/auth/{provider}')
 async def auth(provider: str, request: Request):
+    client = oauth.create_client(provider)
     try:
-        print("hello")
-        token = await oauth.create_client(provider).authorize_access_token(request)
+        token = await client.authorize_access_token(request)
     except OAuthError as error:
         return {'error': error.error}
-    user = token.get('userinfo')
-    request.session['user'] = dict(user)
-    print(request.session['user'])
+
+    user = await handleToken(token,client)
+#  Normalize user left to do 
     return {'message': f'Successfully authenticated with {provider}', 'user': user}
 
 
