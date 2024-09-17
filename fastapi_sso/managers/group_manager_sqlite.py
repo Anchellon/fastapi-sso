@@ -2,75 +2,122 @@ from datetime import datetime
 import sqlite3
 import uuid
 from typing import List, Optional, Dict
+
+from pydantic import TypeAdapter
+
+from fastapi_sso.models.group import GroupBase
+from fastapi_sso.models.user import UserBase
 from ..utils.utils import generate_deci_code
 class GroupManagerSQLite:
     def __init__(self, db_file: str = '../db/user.db'):
         self.db_file = db_file
         
         # Initialize empty caches
-        self.groups_cache: Dict[str, Dict] = {}  # group_id -> group_info
-        self.users_cache: Dict[str, Dict] = {}  # user_id -> user_info
+        self.groups_cache: Dict[str, GroupBase] = {}  # group_id -> group Model obj
+        self.users_cache: Dict[str, UserBase] = {}  # user_id -> user Model obj
         self.user_groups_cache: Dict[str, List[str]] = {}  # user_id -> list of group_ids
         self.group_users_cache: Dict[str, List[str]] = {}  # group_id -> list of user_ids
 
-
-    def _get_group_from_db(self, group_id: str) -> Optional[Dict]:
+    # done
+    def _get_group_from_db(self, group_id: str) -> Optional[GroupBase]:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT group_id, group_name FROM groups WHERE group_id = ?', (group_id,))
             result = cursor.fetchone()
             print(result)
+            group_dict = dict(result)
             if result:
-                return {"group_id": result[0], "group_name": result[1]}
+                group_adapter = TypeAdapter(GroupBase)
+                return group_adapter.validate_python(group_dict)
         return None
 
-    def _get_user_from_db(self, user_id: str) -> Optional[Dict]:
+    # done
+    def _get_user_from_db(self, user_id: str) -> Optional[UserBase]:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT user_id, username FROM users WHERE user_id = ?', (user_id,))
+            cursor.execute('''
+                           SELECT id, username, email, full_name, bio, profile_picture_url, 
+                       status, is_active, is_verified, phone_number, password_hash, 
+                       last_seen, created_at, updated_at
+                FROM users 
+                WHERE id = ?'''
+                , (user_id))
             result = cursor.fetchone()
             if result:
-                return {"user_id": result[0], "username": result[1]}
+                user_dict = dict(result)
+                # Convert integer boolean fields to Python booleans
+                user_dict['is_active'] = bool(user_dict['is_active'])
+                user_dict['is_verified'] = bool(user_dict['is_verified'])
+                # Convert string timestamps to datetime objects
+                for field in ['last_seen', 'created_at', 'updated_at']:
+                    if user_dict[field]:
+                        user_dict[field] = datetime.fromisoformat(user_dict[field])
+                
+                # Use TypeAdapter to validate and create a User instance
+                user_adapter = TypeAdapter(UserBase)
+                return user_adapter.validate_python(user_dict)
         return None
-
+    # done
     def _get_user_groups_from_db(self, user_id: str) -> List[str]:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT group_id FROM user_groups WHERE user_id = ?', (user_id,))
+            # extracts first column( here it is group_id) from the reulting rows that have been fetched
             return [row[0] for row in cursor.fetchall()]
-
+    # done
     def _get_group_users_from_db(self, group_id: str) -> List[str]:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT user_id FROM user_groups WHERE group_id = ?', (group_id,))
+             # extracts first column ( here it is user_id) from the reulting rows that have been fetched
             return [row[0] for row in cursor.fetchall()]
-
+    # done
     def create_group(self, group_name: str) -> str:
-        group_id = generate_deci_code(6)
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO groups (group_id, group_name) VALUES (?, ?)', (group_id, group_name))
+            cursor.execute('INSERT INTO groups group_name VALUES (?, ?)', (group_name))
             conn.commit()
-        
+        group_id = cursor.lastrowid
         # Update cache
-        self.groups_cache[group_id] = {"group_id": group_id, "group_name": group_name}
+        group = GroupBase(
+            group_id=group_id,
+            group_name=group_name
+        )
+        self.groups_cache[group_id] = group
         self.group_users_cache[group_id] = []
-        
-        return group_id
+        return group
 
-    def create_user(self, user_id:str,username: str,) -> str:
-        
+    
+    # done
+    def create_user(self, username: str, email: str, password_hash: str, full_name: str, bio: str = None, profile_picture_url: str = None, phone_number: str = None) -> str:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('INSERT INTO users (user_id, username) VALUES (?, ?)', (user_id, username))
+            cursor.execute('''
+                INSERT INTO users (username, email, password_hash, full_name, bio, profile_picture_url, phone_number)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (username, email, password_hash, full_name, bio, profile_picture_url, phone_number))
             conn.commit()
-        
+        user_id = cursor.lastrowid
         # Update cache
-        self.users_cache[user_id] = {"user_id": user_id, "username": username}
+        user = UserBase(
+            id=user_id,
+            username=username,
+            email=email,
+            full_name=full_name,
+            bio=bio,
+            profile_picture_url=profile_picture_url,
+            last_seen=datetime.now().isoformat(),
+            phone_number=phone_number,
+            is_active = True,
+            is_verified = False
+        )
+        
+        self.users_cache[user_id] = user
         self.user_groups_cache[user_id] = []
         
-        return user_id
+        return user
 
+    # done 
     def add_user_to_group(self, user_id: str, group_id: str) -> bool:
         try:
             with sqlite3.connect(self.db_file) as conn:
@@ -87,7 +134,7 @@ class GroupManagerSQLite:
             return True
         except sqlite3.IntegrityError:
             return False  # User already in group or user/group doesn't exist
-
+    # done
     def remove_user_from_group(self, user_id: str, group_id: str) -> bool:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
@@ -101,19 +148,19 @@ class GroupManagerSQLite:
                     self.group_users_cache[group_id].remove(user_id)
                 return True
             return False
-
+    # done
     def get_user_groups(self, user_id: str) -> List[dict]:
         if user_id not in self.user_groups_cache:
             self.user_groups_cache[user_id] = self._get_user_groups_from_db(user_id)
         
         return [self.get_group_by_id(group_id) for group_id in self.user_groups_cache[user_id]]
-
+    # done
     def get_group_users(self, group_id: str) -> List[dict]:
         if group_id not in self.group_users_cache:
             self.group_users_cache[group_id] = self._get_group_users_from_db(group_id)
         
         return [self.get_user_by_id(user_id) for user_id in self.group_users_cache[group_id]]
-
+    # done
     def get_group_by_id(self, group_id: str) -> Optional[dict]:
         if group_id not in self.groups_cache:
             group = self._get_group_from_db(group_id)
@@ -123,16 +170,17 @@ class GroupManagerSQLite:
                 return None
         return self.groups_cache[group_id]
 
-    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+    # Done
+    def get_user_by_id(self, user_id: str) -> Optional[UserBase]:
         if user_id not in self.users_cache:
             user = self._get_user_from_db(user_id)
             if user:
                 self.users_cache[user_id] = user
             else:
                 return None
-        return self.users_cache[user_id]
-
-    def get_group_by_name(self, group_name: str) -> Optional[dict]:
+        return user
+    # Done
+    def get_group_by_name(self, group_name: str) -> Optional[GroupBase]:
         # This operation requires a full DB scan if not in cache
         for group in self.groups_cache.values():
             if group['group_name'] == group_name:
@@ -143,12 +191,12 @@ class GroupManagerSQLite:
             cursor.execute('SELECT group_id, group_name FROM groups WHERE group_name = ?', (group_name,))
             result = cursor.fetchone()
             if result:
-                group = {"group_id": result[0], "group_name": result[1]}
+                group = GroupBase(group_id=result[0],group_name=result[1])
                 self.groups_cache[group['group_id']] = group
                 return group
         return None
-
-    def get_user_by_username(self, username: str) -> Optional[dict]:
+    # done
+    def get_user_by_username(self, username: str) -> Optional[UserBase]:
         # This operation requires a full DB scan if not in cache
         for user in self.users_cache.values():
             if user['username'] == username:
@@ -156,14 +204,29 @@ class GroupManagerSQLite:
         
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT user_id, username FROM users WHERE username = ?', (username,))
+            cursor.execute('''
+                           SELECT id, username, email, full_name, bio, profile_picture_url, 
+                       status, is_active, is_verified, phone_number, password_hash, 
+                       last_seen, created_at, updated_at
+                FROM users 
+                WHERE username = ?'''
+                , (username))
             result = cursor.fetchone()
             if result:
-                user = {"user_id": result[0], "username": result[1]}
-                self.users_cache[user['user_id']] = user
-                return user
-        return None
-
+                user_dict = dict(result)
+                # Convert integer boolean fields to Python booleans
+                user_dict['is_active'] = bool(user_dict['is_active'])
+                user_dict['is_verified'] = bool(user_dict['is_verified'])
+                # Convert string timestamps to datetime objects
+                for field in ['last_seen', 'created_at', 'updated_at']:
+                    if user_dict[field]:
+                        user_dict[field] = datetime.fromisoformat(user_dict[field])
+                
+                # Use TypeAdapter to validate and create a User instance
+                user_adapter = TypeAdapter(UserBase)
+                return user_adapter.validate_python(user_dict)
+            return None
+    # Done
     def delete_group(self, group_id: str) -> bool:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
@@ -179,7 +242,7 @@ class GroupManagerSQLite:
                         user_groups.remove(group_id)
                 return True
             return False
-
+    # Done
     def delete_user(self, user_id: str) -> bool:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
@@ -195,6 +258,7 @@ class GroupManagerSQLite:
                         group_users.remove(user_id)
                 return True
             return False
+# We need to se if this need to come into play later  
     def get_user_last_seen_online(self, user_id: str) -> str:
             """
             Get the last_seen_online timestamp for a given user_id.

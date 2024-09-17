@@ -64,11 +64,14 @@ def init_sqlite_database(db_file: str) -> None:
             'group_name TEXT NOT NULL UNIQUE'
         ],
         'user_groups': [
-            'user_id INTEGER',
-            'group_id INTEGER',
-            'FOREIGN KEY (user_id) REFERENCES users (id)',
-            'FOREIGN KEY (group_id) REFERENCES groups (group_id)',
-            'PRIMARY KEY (user_id, group_id)'
+            'user_id INTEGER NOT NULL,'
+            'group_id INTEGER NOT NULL',
+            'joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+            'role TEXT NOT NULL DEFAULT "member"',
+            'PRIMARY KEY (user_id, group_id)',
+            'FOREIGN KEY (user_id) REFERENCES users(id)',
+            'FOREIGN KEY (group_id) REFERENCES groups(id)'
+
         ]
     }
     
@@ -83,7 +86,8 @@ def init_sqlite_database(db_file: str) -> None:
         ('idx_user_roles_user_id', 'user_roles', 'user_id'),
         ('idx_user_roles_role_id', 'user_roles', 'role_id'),
         ('idx_user_groups_user_id', 'user_groups', 'user_id'),
-        ('idx_user_groups_group_id', 'user_groups', 'group_id')
+        ('idx_user_groups_group_id', 'user_groups', 'group_id'),
+        ('idx_groups_name', 'groups','group_name')
     ]
 
     try:
