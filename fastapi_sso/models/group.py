@@ -8,15 +8,7 @@ class GroupBase(BaseModel):
 class GroupCreate(GroupBase):
     pass
 
-
-
 class GroupUpdate(BaseModel):
     group_name: Optional[str] = None
 
-
-class GroupWithUsers(GroupResponse):
-    users: List[int]  # List of user IDs
-
-class UserGroup(BaseModel):
-    user_id: int
-    
+   

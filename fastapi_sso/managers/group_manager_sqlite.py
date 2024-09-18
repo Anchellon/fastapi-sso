@@ -6,7 +6,7 @@ from typing import List, Optional, Dict
 from pydantic import TypeAdapter
 
 from fastapi_sso.models.group import GroupBase
-from fastapi_sso.models.user import UserBase
+from fastapi_sso.models.user import UserBase, UserCreate
 from ..utils.utils import generate_deci_code
 class GroupManagerSQLite:
     def __init__(self, db_file: str = '../db/user.db'):
@@ -89,27 +89,28 @@ class GroupManagerSQLite:
 
     
     # done
-    def create_user(self, username: str, email: str, password_hash: str, full_name: str, bio: str = None, profile_picture_url: str = None, phone_number: str = None) -> str:
+    def create_user(self, user: UserCreate) -> UserBase:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO users (username, email, password_hash, full_name, bio, profile_picture_url, phone_number)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (username, email, password_hash, full_name, bio, profile_picture_url, phone_number))
+                INSERT INTO users (username, email, password_hash, full_name, background_information, profile_picture_url, phone_number, auth_provider)
+                VALUES (?, ?, ?, ?, ?, ?, ?,?)
+            ''', (user.username, user.email, user.password_hash, user.full_name, user.background_information, user.profile_picture_url, user.phone_number,user.auth_provider))
             conn.commit()
         user_id = cursor.lastrowid
         # Update cache
         user = UserBase(
             id=user_id,
-            username=username,
-            email=email,
-            full_name=full_name,
-            bio=bio,
-            profile_picture_url=profile_picture_url,
+            username=user.username,
+            email=user.email,
+            full_name=user.full_name,
+            background_information=user.background_information,
+            profile_picture_url=user.profile_picture_url,
             last_seen=datetime.now().isoformat(),
-            phone_number=phone_number,
+            phone_number=user.phone_number,
             is_active = True,
-            is_verified = False
+            is_verified = False,
+            auth_provider=user.auth_provider
         )
         
         self.users_cache[user_id] = user
@@ -205,7 +206,7 @@ class GroupManagerSQLite:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                           SELECT id, username, email, full_name, bio, profile_picture_url, 
+                SELECT id, username, email, full_name, bio, profile_picture_url, 
                        status, is_active, is_verified, phone_number, password_hash, 
                        last_seen, created_at, updated_at
                 FROM users 
@@ -226,6 +227,32 @@ class GroupManagerSQLite:
                 user_adapter = TypeAdapter(UserBase)
                 return user_adapter.validate_python(user_dict)
             return None
+    def get_user_by_email_and_provider(self,email:str,auth_provider:str)-> Optional[UserBase]:
+        with sqlite3.connect(self.db_file) as conn:    
+            cursor = conn.cursor()
+            cursor.execute('''
+            SELECT id, username, email, full_name, background_information, profile_picture_url,
+                status, is_active, is_verified, phone_number, password_hash,
+                last_seen, created_at, updated_at
+            FROM users
+            WHERE email = ? AND auth_provider = ? ''',
+            (email,auth_provider))
+            result = cursor.fetchone()
+            if result:
+                user_dict = dict(result)
+                # Convert integer boolean fields to Python booleans
+                user_dict['is_active'] = bool(user_dict['is_active'])
+                user_dict['is_verified'] = bool(user_dict['is_verified'])
+                # Convert string timestamps to datetime objects
+                for field in ['last_seen', 'created_at', 'updated_at']:
+                    if user_dict[field]:
+                        user_dict[field] = datetime.fromisoformat(user_dict[field])
+                user_adapter = TypeAdapter(UserBase)
+                return user_adapter.validate_python(user_dict)
+            return None
+                
+        
+    
     # Done
     def delete_group(self, group_id: str) -> bool:
         with sqlite3.connect(self.db_file) as conn:

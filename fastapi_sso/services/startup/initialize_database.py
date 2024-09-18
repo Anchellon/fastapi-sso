@@ -21,11 +21,12 @@ def init_sqlite_database(db_file: str) -> None:
     tables = {
         'users': [
             'id INTEGER PRIMARY KEY AUTOINCREMENT',
-            'username TEXT NOT NULL UNIQUE',
-            'email TEXT NOT NULL UNIQUE',
-            'password_hash TEXT NOT NULL',
-            'full_name TEXT NOT NULL',
-            'bio TEXT',
+            'username TEXT UNIQUE',
+            'email TEXT NOT NULL ',
+            'password_hash TEXT',
+            'full_name TEXT',
+            'background_information TEXT',
+            'goal TEXT',
             'profile_picture_url TEXT',
             'status TEXT NOT NULL DEFAULT "offline"',
             'last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
@@ -33,7 +34,10 @@ def init_sqlite_database(db_file: str) -> None:
             'updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
             'is_active INTEGER NOT NULL DEFAULT 1',
             'is_verified INTEGER NOT NULL DEFAULT 0',
-            'phone_number TEXT'
+            'phone_number TEXT',
+            'auth_provider TEXT',
+            'UNIQUE (email, auth_provider)'
+
         ],
         'roles': [
             'id INTEGER PRIMARY KEY AUTOINCREMENT',

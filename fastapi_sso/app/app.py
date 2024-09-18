@@ -6,6 +6,7 @@ from starlette.requests import Request
 from authlib.integrations.starlette_client import OAuth,OAuthError
 # from .config import CLIENT_ID, CLIENT_SECRET
 from starlette.middleware.sessions import SessionMiddleware
+from fastapi_sso.services.group_management_service import GroupManagementService
 from fastapi_sso.services.startup.initialize_database import ensure_file_exists, init_sqlite_database
 from fastapi_sso.utils.auth import handleToken
 
@@ -19,6 +20,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key="add any string...")
 
+def get_group_management_service():
+    return GroupManagementService()
 
 # Configuration
 config = Config('../.env')
@@ -62,15 +65,17 @@ async def login(provider: str, request: Request):
     return await oauth.create_client(provider).authorize_redirect(request, redirect_uri)
 
 @app.get('/auth/{provider}')
-async def auth(provider: str, request: Request):
+async def auth(provider: str, request: Request,group_mgt_serv : GroupManagementService = Depends(get_group_management_service)):
     client = oauth.create_client(provider)
     try:
         token = await client.authorize_access_token(request)
     except OAuthError as error:
         return {'error': error.error}
-
-    user = await handleToken(token,client)
-#  Normalize user left to do 
+    #  Normalize user 
+    user = await handleToken(token,client, group_mgt_serv)
+    if(user.is_verified):
+        # create a JWT session token and return the session user info in this 
+        pass
     return {'message': f'Successfully authenticated with {provider}', 'user': user}
 
 

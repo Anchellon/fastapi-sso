@@ -1,21 +1,23 @@
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 from typing import Optional
-
+#
+# if an id of -1 is present , the user is not created 
 class UserBase(BaseModel):
     id: int
-    username: str = Field(..., min_length=1, max_length=50)
+    username: Optional[str] = Field(None, min_length=1, max_length=50)
     email: EmailStr
     full_name: str
-    bio: Optional[str] = None
+    background_information: Optional[str] = None
     profile_picture_url: Optional[str] = None
     status: str = "offline"
     is_active: bool = True
     is_verified: bool = False
     phone_number: Optional[str] = None
+    auth_provider:Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+    password_hash:  Optional[str] = None
 
 class UserUpdate(BaseModel):
     username: Optional[str] = Field(None, min_length=1, max_length=50)
