@@ -1,13 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import secrets
 import sqlite3
 import uuid
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Set
 
 from pydantic import TypeAdapter
 
 from fastapi_sso.models.group import GroupBase
 from fastapi_sso.models.user import UserBase, UserCreate
 from ..utils.utils import generate_deci_code
+
+REFRESH_TOKEN_EXPIRE_DAYS = 30
+
 class GroupManagerSQLite:
     def __init__(self, db_file: str = '../db/user.db'):
         self.db_file = db_file
@@ -229,6 +233,7 @@ class GroupManagerSQLite:
             return None
     def get_user_by_email_and_provider(self,email:str,auth_provider:str)-> Optional[UserBase]:
         with sqlite3.connect(self.db_file) as conn:    
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
             SELECT id, username, email, full_name, background_information, profile_picture_url,
@@ -336,3 +341,69 @@ class GroupManagerSQLite:
                 except sqlite3.Error as e:
                     print(f"An error occurred: {e}")
                     return False
+    
+    def get_user_roles(self,user_id:str)->Set[str]:
+        with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                try:
+                    query = """
+                    SELECT DISTINCT r.name AS role_name
+                    FROM user_roles ur
+                    JOIN roles r ON ur.role_id = r.id
+                    WHERE ur.user_id = ?
+                    """
+
+                    cursor.execute(query, (user_id,))
+                    results = cursor.fetchall()
+                    roles = set()
+                    for (role,) in results:
+                        roles.add(role)
+                    return roles
+                except sqlite3.Error as e:
+                    print(f"An error occurred: {e}")
+                    return False
+    def create_refresh_token(self,user_id:str)-> Dict:
+        refresh_token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    
+        with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                expires = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    
+                try:
+                    query = """
+                        INSERT INTO refresh_tokens (token, user_id, expires) VALUES (?, ?, ?)
+                    """
+                    cursor = conn.cursor()
+                    cursor.execute(query, (refresh_token,user_id,expires))
+                    conn.commit()
+                    return {'refresh_token':refresh_token,'user_id':user_id,'expires':expires}
+                except sqlite3.Error as e:
+                    print(f"An error occurred: {e}")
+                    return False
+    def get_refresh_token(self,token: str)-> Dict:
+            with sqlite3.connect(self.db_file) as conn:
+                try:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT user_id, expires FROM refresh_tokens WHERE token = ?", (token,))
+                    result = cursor.fetchone()
+                    if result:
+                        user_id, expires_str = result
+                        expires = datetime.fromisoformat(expires_str)
+                        return {"user_id": user_id, "expires": expires}
+                    return None
+                except sqlite3.Error as e:
+                    print(f"An error occurred: {e}")
+                    return False
+    def delete_refresh_token(self,token:str):
+        with sqlite3.connect(self.db_file) as conn:
+                try:
+                    cursor = conn.cursor()
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM refresh_tokens WHERE token = ?", (token,))
+                    conn.commit()
+                    return token
+                except sqlite3.Error as e:
+                    print(f"An error occurred: {e}")
+                    return False
+

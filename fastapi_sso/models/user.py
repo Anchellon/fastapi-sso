@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 #
 # if an id of -1 is present , the user is not created 
 class UserBase(BaseModel):
@@ -39,5 +39,5 @@ class UserInDB(UserBase):
     class Config:
         orm_mode = True
 
-class User(UserInDB):
-    pass
+class CurrentUser(UserBase):
+    roles: List[str]

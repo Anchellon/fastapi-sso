@@ -76,6 +76,11 @@ def init_sqlite_database(db_file: str) -> None:
             'FOREIGN KEY (user_id) REFERENCES users(id)',
             'FOREIGN KEY (group_id) REFERENCES groups(id)'
 
+        ],
+        'refresh_tokens':[
+            'token TEXT PRIMARY KEY',
+            'user_id TEXT NOT NULL',
+            'expires TIMESTAMP NOT NULL'
         ]
     }
     
@@ -129,6 +134,24 @@ def ensure_file_exists(file_path: str) -> bool:
             print(f"Error creating file {file_path}: {e}")
             return False
 
+def insert_roles(db_file: str) -> None:
+    """Insert predefined roles into the roles table."""
+    roles = [
+        ('USER', 'A person who uses the app'),
+        ('ADMIN', 'Has all permissions')
+    ]
+
+    try:
+        with sqlite3.connect(db_file) as conn:
+            cursor = conn.cursor()
+            cursor.executemany("""
+                INSERT OR IGNORE INTO roles (name, description)
+                VALUES (?, ?)
+            """, roles)
+            conn.commit()
+            print(f"Successfully inserted or updated {len(roles)} roles.")
+    except sqlite3.Error as e:
+        print(f"An error occurred while inserting roles: {e}")
 # Example usage
 if __name__ == "__main__":
     db_file = "path/to/your/database.db"

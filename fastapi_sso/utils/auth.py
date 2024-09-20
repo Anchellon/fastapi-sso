@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from authlib.integrations.starlette_client import OAuthError
 
 from fastapi_sso.models.user import UserCreate
@@ -44,3 +45,14 @@ async def handleToken(token ,client, group_management_service: GroupManagementSe
     user = group_management_service.create_user(user_create)
     # Potentially assign roles here 
     return user
+
+# Function to create JWT token: to do: move it here completely
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc)+ timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    return encoded_jwt

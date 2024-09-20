@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 from fastapi_sso.models.user import UserBase, UserCreate
 from ..managers.group_manager_sqlite import GroupManagerSQLite
@@ -51,3 +51,15 @@ class GroupManagementService:
     
     def get_user_last_seen_online(self,user_id:str)-> bool:
         return self.group_manager.get_user_last_seen_online(user_id)
+    
+    def get_user_roles(self,user_id:str)->Set[str]:
+        return self.group_manager.get_user_roles(user_id)
+
+    def create_refresh_token(self,user_id:str)->Dict:
+        return self.group_manager.create_refresh_token(user_id)
+
+    def get_refresh_token(self,token:str)-> Dict:
+        return self.group_manager.get_refresh_token(token)
+    
+    def delete_refresh_token(self,token:str):
+        return self.group_manager.delete_refresh_token(token)
