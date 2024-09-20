@@ -86,12 +86,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme),group_mgt_serv : 
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    print(token)
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        print(payload)
         id: str = payload.get("sub")
         if id is None:
             raise credentials_exception
-        user_info = await group_mgt_serv.get_user_by_id(id)
+        user_info =  group_mgt_serv.get_user_by_id(id)
         roles: List[str] = payload.get("roles", [])
         current_user = CurrentUser(
             id=user_info.id,
@@ -149,7 +151,7 @@ async def auth(provider: str, request: Request,group_mgt_serv : GroupManagementS
     # create jwt
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id, "name": user.full_name, "roles":roles, "is_verified":user.is_verified},
+        data={"sub": str(user.id), "name": user.full_name, "roles":roles, "is_verified":user.is_verified},
         expires_delta=access_token_expires
     )
     
@@ -177,7 +179,7 @@ async def refresh_token(refresh_token: str,group_mgt_serv : GroupManagementServi
     roles = group_mgt_serv.get_user_roles(user.id)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.id, "name": user.full_name, "roles":roles, "is_verified":user.is_verified},
+        data={"sub": str(user.id), "name": user.full_name, "roles":roles, "is_verified":user.is_verified},
         expires_delta=access_token_expires
     )
     
@@ -189,11 +191,11 @@ async def refresh_token(refresh_token: str,group_mgt_serv : GroupManagementServi
 
 
 @app.get("/admin-only")
-async def admin_only(current_user: CurrentUser = Depends(has_role(["admin"]))):
+async def admin_only(current_user: CurrentUser = Depends(has_role(["ADMIN"]))):
     return {"message": "Welcome, admin!"}
 
 @app.get("/user-or-admin")
-async def user_or_admin(current_user: CurrentUser = Depends(has_role(["user", "admin"]))):
+async def user_or_admin(current_user: CurrentUser = Depends(has_role(["USER", "ADMIN"]))):
     return {"message": f"Welcome, {current_user.email}!"}
 
 

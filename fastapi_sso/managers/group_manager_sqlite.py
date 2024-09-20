@@ -38,9 +38,10 @@ class GroupManagerSQLite:
     # done
     def _get_user_from_db(self, user_id: str) -> Optional[UserBase]:
         with sqlite3.connect(self.db_file) as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute('''
-                           SELECT id, username, email, full_name, bio, profile_picture_url, 
+                           SELECT id, username, email, full_name, background_information, profile_picture_url, 
                        status, is_active, is_verified, phone_number, password_hash, 
                        last_seen, created_at, updated_at
                 FROM users 
@@ -399,7 +400,6 @@ class GroupManagerSQLite:
         with sqlite3.connect(self.db_file) as conn:
                 try:
                     cursor = conn.cursor()
-                    cursor = conn.cursor()
                     cursor.execute("DELETE FROM refresh_tokens WHERE token = ?", (token,))
                     conn.commit()
                     return token
@@ -407,3 +407,64 @@ class GroupManagerSQLite:
                     print(f"An error occurred: {e}")
                     return False
 
+    def assign_roles(self,user_id, roles):
+        # Connect to the SQLite database
+        with sqlite3.connect(self.db_file) as conn:
+                try:
+                    cursor = conn.cursor()
+                    # Start a transaction
+                    cursor.execute("BEGIN TRANSACTION")
+
+                    # Get current roles for the user
+                    cursor.execute("SELECT r.name FROM user_roles ur JOIN roles r ON ur.role_id = r.id WHERE ur.user_id = ?", (user_id,))
+                    current_roles = set(role[0] for role in cursor.fetchall())
+
+                    # Determine roles to add and remove
+                    new_roles = set(roles)
+                    roles_to_add = new_roles - current_roles
+                    roles_to_remove = current_roles - new_roles
+
+                    # Add new roles
+                    for role in roles_to_add:
+                        cursor.execute("SELECT id FROM roles WHERE name = ?", (role,))
+                        result = cursor.fetchone()
+                        if result:
+                            role_id = result[0]
+                            cursor.execute("""
+                                INSERT OR IGNORE INTO user_roles (user_id, role_id) 
+                                VALUES (?, ?)
+                            """, (user_id, role_id))
+                        else:
+                            print(f"Warning: Role '{role}' not found in the database.")
+
+                    # Commit the transaction
+                    conn.commit()
+                    print(f"Successfully upserted roles for user {user_id}")
+
+                except sqlite3.Error as e:
+                    # If there's an error, roll back the changes
+                    conn.rollback()
+                    print(f"An error occurred: {e}")
+
+    def get_roles(self,user_id):
+        # Connect to the SQLite database
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+
+            try:
+                # Query to get user roles
+                cursor.execute("""
+                    SELECT r.name 
+                    FROM user_roles ur
+                    JOIN roles r ON ur.role_id = r.id
+                    WHERE ur.user_id = ?
+                """, (user_id,))
+                
+                # Fetch all roles
+                roles = [role[0] for role in cursor.fetchall()]
+                
+                return roles
+
+            except sqlite3.Error as e:
+                print(f"An error occurred: {e}")
+                return []

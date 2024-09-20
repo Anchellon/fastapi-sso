@@ -63,3 +63,9 @@ class GroupManagementService:
     
     def delete_refresh_token(self,token:str):
         return self.group_manager.delete_refresh_token(token)
+    
+    def assign_roles(self,user_id:str,roles:List[str]):
+        return self.group_manager.assign_roles(user_id,roles)
+       
+    def get_roles(self,user_id:str)-> List[str]:
+        return self.group_manager.get_roles(user_id=user_id)
