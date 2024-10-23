@@ -2,10 +2,23 @@ from typing import Dict, List, Optional, Set
 
 from fastapi_sso.models.user import UserBase, UserCreate
 from ..managers.group_manager_sqlite import GroupManagerSQLite
+from ..managers.group_manager_postgres import GroupManagerPostgres
+from starlette.config import Config
 class GroupManagementService:
     def __init__(self) -> None:
-        self.group_manager = GroupManagerSQLite() # this implementation can be swapped for oother implementations out based on env var, use if statements
+        config = Config('../.env')
+        db_params = {
+            'dbname': config.file_values["USER_DB_NAME"],
+            'user': config.file_values["USER_DB_OWNER"],
+            'password': config.file_values["USER_DB_PWD"],
+            'host': config.file_values["USER_DB"],
+            'port': config.file_values["USER_DB_PORT"]
+        }
+        self.group_manager = GroupManagerPostgres(db_params)
+        # GroupManagerSQLite() 
+        # this implementation can be swapped for oother implementations out based on env var, use if statements
         # any other house keeping can be done here too
+
 
     def create_group(self, group_name: str) -> str:
         return self.group_manager.create_group(group_name=group_name)

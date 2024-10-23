@@ -55,9 +55,10 @@ oauth2_scheme = OAuth2AuthorizationCodeBearer(
 )
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_file_exists("../db/user.db")
-    init_sqlite_database("../db/user.db")
-    insert_roles("../db/user.db")
+    #  Local dev
+    # ensure_file_exists("../db/user.db")
+    # init_sqlite_database("../db/user.db")
+    # insert_roles("../db/user.db")
     yield
 
 
